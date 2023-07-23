@@ -52,15 +52,12 @@ impl SmartHouse {
         &self.rooms
     }
 
-    pub fn devices(&self, room: &str) -> &Vec<&str> {
+    pub fn devices(&self, room: &str) -> Option<&Vec<&str>> {
         // Размер возвращаемого массива можно выбрать самостоятельно
-        match self.devices.get(room) {
-            Some(v) => v,
-            None => panic!("no room found"),
-        }
+        self.devices.get(room)
     }
 
-    pub fn create_report<T>(&self, provider: &T) -> String
+    pub fn create_report<'a, T>(&'a self, provider: &'a T) -> Result<String, &str>
     where
         T: DeviceInfoProvider,
     {

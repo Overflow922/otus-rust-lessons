@@ -18,14 +18,16 @@ fn main() {
     // Строим отчёт с использованием `OwningDeviceInfoProvider`.
     let info_provider_1 = OwningDeviceInfoProvider::new(socket1);
 
-    let report1 = house.create_report(&info_provider_1);
+    match house.create_report(&info_provider_1) {
+        Ok(s) => println!("Report #1:\n{s}"),
+        Err(e) => println!("Error occurred{e}"),
+    }
 
     // Строим отчёт с использованием `BorrowingDeviceInfoProvider`.
     let info_provider_2 = BorrowingDeviceInfoProvider::new(&socket2, &thermo);
 
-    let report2 = house.create_report(&info_provider_2);
-
-    // Выводим отчёты на экран:
-    println!("Report #1: {report1}");
-    println!("Report #2: {report2}");
+    match house.create_report(&info_provider_2) {
+        Ok(s) => println!("Report #2:\n{s}"),
+        Err(e) => println!("Error occurred:\n{e}"),
+    }
 }

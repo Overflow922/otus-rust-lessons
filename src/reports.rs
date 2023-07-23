@@ -1,10 +1,17 @@
 use crate::devices::{SmartHouse, SmartSocket, SmartThermometer};
 
 pub trait DeviceInfoProvider {
-    fn get_state(&self, house: &SmartHouse) -> String;
+    fn get_state(&self, house: &SmartHouse) -> Result<String, &str>;
 
     fn check(house: &SmartHouse, room_name: &str, device_name: &str) -> bool {
-        house.get_rooms().contains(&room_name) && house.devices(room_name).contains(&device_name)
+        if !house.get_rooms().contains(&room_name) {
+            false
+        } else {
+            match house.devices(room_name) {
+                Some(el) => el.contains(&device_name),
+                None => false,
+            }
+        }
     }
 }
 
@@ -31,29 +38,29 @@ impl<'a, 'b> BorrowingDeviceInfoProvider<'a, 'b> {
 }
 
 impl DeviceInfoProvider for OwningDeviceInfoProvider {
-    fn get_state(&self, house: &SmartHouse) -> String {
+    fn get_state(&self, house: &SmartHouse) -> Result<String, &str> {
         if !<OwningDeviceInfoProvider as DeviceInfoProvider>::check(
             house,
             self.socket.room_name,
             self.socket.device_name,
         ) {
-            panic!("cant find device");
+            return Err("cant find device");
         }
-        format!(
+        Ok(format!(
             "device {} in room {} is active",
             self.socket.device_name, self.socket.device_name
-        )
+        ))
     }
 }
 
 impl DeviceInfoProvider for BorrowingDeviceInfoProvider<'_, '_> {
-    fn get_state(&self, house: &SmartHouse) -> String {
+    fn get_state(&self, house: &SmartHouse) -> Result<String, &str> {
         if !<BorrowingDeviceInfoProvider as DeviceInfoProvider>::check(
             house,
             self.socket.room_name,
             self.socket.device_name,
         ) {
-            panic!("cant find device");
+            return Err("device not found");
         }
         let result = format!(
             "device {} in room {} is active",
@@ -65,12 +72,12 @@ impl DeviceInfoProvider for BorrowingDeviceInfoProvider<'_, '_> {
             self.thermo.room_name,
             self.thermo.device_name,
         ) {
-            panic!("cant find device");
+            return Err("cant find device");
         }
-        format!(
+        Ok(format!(
             "{}\ndevice {} in room {} is active",
             result, self.thermo.device_name, self.thermo.room_name
-        )
+        ))
     }
 }
 
