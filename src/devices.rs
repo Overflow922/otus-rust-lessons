@@ -1,21 +1,26 @@
-use crate::hashmap;
 use crate::reports::DeviceInfoProvider;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
-#[derive(PartialEq, Debug)]
-pub struct SmartSocket {
-    pub room_name: &'static str,
-    pub device_name: &'static str,
+pub trait SmartDevice {
+    fn get_name(&self) -> &str;
+    fn get_room(&self) -> &str;
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
+pub struct SmartSocket {
+    pub room_name: String,
+    pub device_name: String,
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub struct SmartThermometer {
-    pub room_name: &'static str,
-    pub device_name: &'static str,
+    pub room_name: String,
+    pub device_name: String,
 }
 
 impl SmartSocket {
-    pub fn new(room: &'static str, device_name: &'static str) -> Self {
+    pub fn new(room: String, device_name: String) -> Self {
         Self {
             room_name: room,
             device_name,
@@ -23,8 +28,18 @@ impl SmartSocket {
     }
 }
 
+impl SmartDevice for SmartSocket {
+    fn get_name(&self) -> &str {
+        &self.device_name
+    }
+
+    fn get_room(&self) -> &str {
+        &self.room_name
+    }
+}
+
 impl SmartThermometer {
-    pub fn new(room_name: &'static str, device_name: &'static str) -> Self {
+    pub fn new(room_name: String, device_name: String) -> Self {
         Self {
             room_name,
             device_name,
@@ -32,30 +47,104 @@ impl SmartThermometer {
     }
 }
 
-#[derive(Debug)]
+impl SmartDevice for SmartThermometer {
+    fn get_name(&self) -> &str {
+        &self.device_name
+    }
+
+    fn get_room(&self) -> &str {
+        &self.room_name
+    }
+}
+
 pub struct SmartHouse {
-    rooms: Vec<&'static str>,
-    devices: HashMap<&'static str, Vec<&'static str>>,
+    devices: HashMap<String, HashMap<String, Box<dyn SmartDevice>>>,
+}
+
+pub struct SmartHouseBuilder {
+    devices: HashMap<String, HashMap<String, Box<dyn SmartDevice>>>,
+}
+
+impl SmartHouseBuilder {
+    pub fn new() -> SmartHouseBuilder {
+        Self {
+            devices: HashMap::default(),
+        }
+    }
+    pub fn add(mut self, device: Box<dyn SmartDevice>) -> SmartHouseBuilder {
+        let entry = self
+            .devices
+            .entry(device.get_room().to_string())
+            .or_default();
+        entry.insert(device.get_name().to_string(), device);
+        self
+    }
+
+    pub fn add_room(mut self, name: &'static str) -> SmartHouseBuilder {
+        self.devices.entry(name.to_string()).or_default();
+        self
+    }
+
+    pub fn build(self) -> SmartHouse {
+        SmartHouse::new(self.devices)
+    }
 }
 
 impl SmartHouse {
-    pub fn new() -> Self {
-        Self {
-            rooms: vec!["room1", "room2"],
-            devices: hashmap!("room1" => vec!["thermo", "thermo1", "socket1"],
-            "room2" => vec!["thermo2", "socket2", "socket3"]),
+    fn new(map: HashMap<String, HashMap<String, Box<dyn SmartDevice>>>) -> Self {
+        Self { devices: map }
+    }
+
+    pub fn builder() -> SmartHouseBuilder {
+        SmartHouseBuilder::new()
+    }
+
+    pub fn get_room(&self, name: String) -> Option<&HashMap<String, Box<dyn SmartDevice>>> {
+        self.devices.get(&name)
+    }
+
+    pub fn get_rooms(&self) -> Vec<&str> {
+        // Размер возвращаемого массива можно выбрать самостоятельно
+        self.devices
+            .keys()
+            // .iter()
+            .map(|k| k.as_str())
+            .collect::<Vec<&str>>()
+    }
+    //  `self.devices.keys().map(|k| k.as_str())`
+    pub fn devices(&self, room: String) -> Option<&HashMap<String, Box<dyn SmartDevice>>> {
+        // Размер возвращаемого массива можно выбрать самостоятельно
+        self.devices.get(&room)
+    }
+
+    pub fn add_room(&mut self, name: String) -> Result<(), &'static str> {
+        match self.devices.entry(name) {
+            Entry::Occupied(_) => Err("duplicate room. Can't add"),
+            Entry::Vacant(v) => {
+                v.insert(HashMap::default());
+                Ok(())
+            }
         }
     }
 
-    pub fn get_rooms(&self) -> &Vec<&str> {
-        // Размер возвращаемого массива можно выбрать самостоятельно
-        &self.rooms
+    pub fn add_device(
+        &mut self,
+        room_name: String,
+        device: Box<dyn SmartDevice>,
+    ) -> Result<(), &'static str> {
+        if self.devices.contains_key(&room_name) {
+            Err("room not found")
+        } else {
+            self.devices.entry(room_name).and_modify(|v| {
+                v.insert(device.get_name().to_string(), device);
+            });
+            Ok(())
+        }
     }
-
-    pub fn devices(&self, room: &str) -> Option<&Vec<&str>> {
-        // Размер возвращаемого массива можно выбрать самостоятельно
-        self.devices.get(room)
-    }
+    // self.devices.get(&room_name)
+    //     .expect("room not found")
+    //     .insert(String::from(device.get_name()), device)
+    //     .ok_or_else(|| "room not found")
 
     pub fn create_report<'a, T>(&'a self, provider: &'a T) -> Result<String, &str>
     where
@@ -71,24 +160,41 @@ mod tests {
 
     #[test]
     fn socket_creation() {
-        let socket = SmartSocket::new("room1", "device1");
+        let socket = SmartSocket::new(String::from("room1"), String::from("device1"));
         assert_eq!(socket.room_name, "room1");
         assert_eq!(socket.device_name, "device1");
     }
 
     #[test]
     fn thermometer_creation() {
-        let therm = SmartThermometer::new("room1", "device1");
+        let therm = SmartThermometer::new(String::from("room1"), String::from("device1"));
         assert_eq!(therm.room_name, "room1");
         assert_eq!(therm.device_name, "device1");
     }
 
     #[test]
     fn smart_house_creation() {
-        let house = SmartHouse::new();
+        let therm = SmartThermometer::new(String::from("room1"), String::from("device1"));
+        let socket = SmartSocket::new(String::from("room2"), String::from("device1"));
+        let house = SmartHouse::builder()
+            .add(Box::new(therm))
+            .add(Box::new(socket))
+            .build();
         let rooms = house.get_rooms();
         assert_eq!(rooms.len(), 2);
-        assert_eq!(house.devices(rooms[0]).len(), 3);
-        assert_eq!(house.devices(rooms[1]).len(), 3);
+        assert_eq!(
+            house
+                .devices(rooms[0].to_string())
+                .expect("should not be empty")
+                .len(),
+            1
+        );
+        assert_eq!(
+            house
+                .devices(rooms[1].to_string())
+                .expect("should not be empty")
+                .len(),
+            1
+        );
     }
 }

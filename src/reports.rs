@@ -1,14 +1,14 @@
-use crate::devices::{SmartHouse, SmartSocket, SmartThermometer};
+use crate::devices::{SmartDevice, SmartHouse, SmartSocket, SmartThermometer};
 
 pub trait DeviceInfoProvider {
     fn get_state(&self, house: &SmartHouse) -> Result<String, &str>;
 
-    fn check(house: &SmartHouse, room_name: &str, device_name: &str) -> bool {
+    fn check(house: &SmartHouse, room_name: &str, device: &dyn SmartDevice) -> bool {
         if !house.get_rooms().contains(&room_name) {
             false
         } else {
-            match house.devices(room_name) {
-                Some(el) => el.contains(&device_name),
+            match house.devices(room_name.to_string()) {
+                Some(el) => el.contains_key(device.get_name()),
                 None => false,
             }
         }
@@ -41,8 +41,8 @@ impl DeviceInfoProvider for OwningDeviceInfoProvider {
     fn get_state(&self, house: &SmartHouse) -> Result<String, &str> {
         if !<OwningDeviceInfoProvider as DeviceInfoProvider>::check(
             house,
-            self.socket.room_name,
-            self.socket.device_name,
+            &self.socket.room_name,
+            &self.socket,
         ) {
             return Err("cant find device");
         }
@@ -57,8 +57,8 @@ impl DeviceInfoProvider for BorrowingDeviceInfoProvider<'_, '_> {
     fn get_state(&self, house: &SmartHouse) -> Result<String, &str> {
         if !<BorrowingDeviceInfoProvider as DeviceInfoProvider>::check(
             house,
-            self.socket.room_name,
-            self.socket.device_name,
+            &self.socket.room_name,
+            self.socket,
         ) {
             return Err("device not found");
         }
@@ -69,8 +69,8 @@ impl DeviceInfoProvider for BorrowingDeviceInfoProvider<'_, '_> {
 
         if !<BorrowingDeviceInfoProvider as DeviceInfoProvider>::check(
             house,
-            self.thermo.room_name,
-            self.thermo.device_name,
+            &self.thermo.room_name,
+            self.thermo,
         ) {
             return Err("cant find device");
         }
@@ -87,7 +87,7 @@ mod tests {
 
     #[test]
     fn own_device_creation() {
-        let socket = SmartSocket::new("room1", "socket1");
+        let socket = SmartSocket::new(String::from("room1"), String::from("socket1"));
         let provider = OwningDeviceInfoProvider::new(socket);
         assert_eq!(provider.socket.room_name, "room1");
         assert_eq!(provider.socket.device_name, "socket1")
@@ -95,10 +95,10 @@ mod tests {
 
     #[test]
     fn borrow_device_creation() {
-        let socket = SmartSocket::new("room1", "socket1");
-        let thermometer = SmartThermometer::new("room2", "therm2");
+        let socket = SmartSocket::new(String::from("room1"), String::from("socket1"));
+        let thermometer = SmartThermometer::new(String::from("room2"), String::from("therm2"));
         let provider = BorrowingDeviceInfoProvider::new(&socket, &thermometer);
-        assert_eq!(*provider.socket.to_owned(), socket);
-        assert_eq!(*provider.thermo.to_owned(), thermometer)
+        assert_eq!(*provider.socket, socket);
+        assert_eq!(*provider.thermo, thermometer)
     }
 }
