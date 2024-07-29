@@ -2,6 +2,8 @@ mod devices;
 mod reports;
 mod utils;
 
+use network::
+
 use crate::devices::{SmartHouse, SmartSocket, SmartThermometer};
 use crate::reports::{BorrowingDeviceInfoProvider, OwningDeviceInfoProvider};
 
