@@ -5,6 +5,8 @@ use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::net::ToSocketAddrs;
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 pub trait SmartDevice {
     fn get_name(&self) -> &str;
@@ -72,11 +74,11 @@ impl NetworkSmartSocket {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct SmartThermometer {
     pub room_name: String,
     pub device_name: String,
-    pub temp: RefCell<u16>,
+    pub temp: Arc<Mutex<u16>>,
 }
 
 impl SmartSocket {
@@ -139,17 +141,15 @@ impl ThermometerUdpMessageProcessor {
 impl UdpMessageProcessor for &ThermometerUdpMessageProcessor {
     fn process(&mut self, message: network::server::UdpMessage) {
         println!("updating temp {}", message.message);
-        self.therm
-            .temp
-            .replace(message.message.parse::<u16>().unwrap());
+        *self.therm.temp.lock().unwrap() = message.message.parse::<u16>().unwrap();
     }
 }
 
 #[derive(Clone)]
 pub struct UdpSmartThermometer {
     pub thermometer: SmartThermometer,
-    udp: UdpServer,
-    processor: ThermometerUdpMessageProcessor,
+    udp: Arc<UdpServer>,
+    processor: Arc<ThermometerUdpMessageProcessor>,
 }
 
 impl SmartDevice for UdpSmartThermometer {
@@ -168,14 +168,18 @@ impl UdpSmartThermometer {
         Addr: ToSocketAddrs,
     {
         Self {
-            processor: ThermometerUdpMessageProcessor::create(therm.clone()),
+            processor: Arc::new(ThermometerUdpMessageProcessor::create(therm.clone())),
             thermometer: therm.clone(),
-            udp: UdpServer::bind(addr).expect("connection error"),
+            udp: Arc::new(UdpServer::bind(addr).expect("connection error")),
         }
     }
 
     pub fn listen(&self) {
-        let _ = self.udp.listen(&self.processor);
+        let udp = self.udp.clone();
+        let processor = self.processor.clone();
+        thread::spawn(move || loop {
+            let _ = udp.listen(&*processor);
+        });
     }
 }
 
@@ -184,7 +188,7 @@ impl SmartThermometer {
         Self {
             room_name,
             device_name,
-            temp: RefCell::new(0),
+            temp: Arc::new(Mutex::new(0)),
         }
     }
 }

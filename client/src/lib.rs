@@ -1,7 +1,6 @@
 use network::client::{HttpConnectionClient, RequestError};
 use network::server::UdpServer;
-use network::utils::{ConnectError, ConnectResult, SendResult};
-use std::io::Error;
+use network::utils::{ConnectResult, SendResult};
 use std::net::{SocketAddr, ToSocketAddrs};
 
 pub struct SmartSocketClient {

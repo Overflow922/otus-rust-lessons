@@ -4,6 +4,7 @@ use core::str;
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs, UdpSocket};
 use std::rc::Rc;
+use std::sync::Arc;
 
 const PROTO_VER: &[u8; 4] = b"0001";
 
@@ -82,7 +83,7 @@ pub trait UdpMessageProcessor {
 
 #[derive(Clone)]
 pub struct UdpServer {
-    server: Rc<UdpSocket>,
+    server: Arc<UdpSocket>,
 }
 
 pub struct UdpMessage {
@@ -97,7 +98,7 @@ impl UdpServer {
     {
         let conn = UdpSocket::bind(addr)?;
         Ok(Self {
-            server: Rc::new(conn),
+            server: Arc::new(conn),
         })
     }
 
