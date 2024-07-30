@@ -1,5 +1,5 @@
 use std::io::{Read, Write};
-use std::{net::{TcpStream, ToSocketAddrs}};
+use std::net::{TcpStream, ToSocketAddrs};
 use thiserror::Error;
 
 use crate::utils::{ConnectError, ConnectResult, RecvError, SendError};
@@ -33,7 +33,10 @@ impl HttpConnectionClient {
         stream.write_all(PROTO_VER)?;
         let mut buf = [0; 4];
         stream.read_exact(&mut buf)?;
-        println!("received answer. Expected ver is {:?}, actual: {:?}", PROTO_VER, buf);
+        println!(
+            "received answer. Expected ver is {:?}, actual: {:?}",
+            PROTO_VER, buf
+        );
         if &buf != PROTO_VER {
             let msg = format!("received: {:?}", buf);
             return Err(ConnectError::BadHandshake(msg));

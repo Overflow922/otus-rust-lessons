@@ -1,4 +1,7 @@
 use crate::reports::DeviceInfoProvider;
+use network::server::TcpServer;
+use network::{MessageProcessor, NetworkConnection, NetworkListener};
+use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
@@ -11,6 +14,61 @@ pub trait SmartDevice {
 pub struct SmartSocket {
     pub room_name: String,
     pub device_name: String,
+    pub turned_on: RefCell<bool>,
+}
+
+#[derive(Debug, Clone)]
+struct NetworkSmartSocketMessageProcessor {
+    socket: SmartSocket,
+}
+
+impl NetworkSmartSocketMessageProcessor {
+    fn create(socket: SmartSocket) -> Self {
+        NetworkSmartSocketMessageProcessor { socket }
+    }
+}
+
+impl MessageProcessor for &NetworkSmartSocketMessageProcessor {
+    fn process(&mut self, mut conn: impl NetworkConnection) {
+        if let Ok(str) = conn.recv_request() {
+            if str == "status" {
+                let _ = conn.send_response(self.socket.status());
+            } else if str == "turn 1" {
+                self.socket.turn_on();
+                let _ = conn.send_response("socket turned on");
+            } else if str == "turn 0" {
+                self.socket.turn_off();
+                let _ = conn.send_response("socket turned off");
+            } else {
+                let _ = conn.send_response("unknown command");
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NetworkSmartSocket {
+    pub socket: SmartSocket,
+    pub server: TcpServer,
+    processor: NetworkSmartSocketMessageProcessor,
+}
+
+impl NetworkSmartSocket {
+    pub fn create(addr: &str, room_name: String, device_name: String) -> Self {
+        let socket = SmartSocket {
+            room_name,
+            device_name,
+            turned_on: RefCell::new(false),
+        };
+        Self {
+            socket: socket.clone(),
+            server: NetworkListener::create(addr),
+            processor: NetworkSmartSocketMessageProcessor::create(socket),
+        }
+    }
+    pub fn listen(&self) {
+        self.server.listen(&self.processor);
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -24,7 +82,25 @@ impl SmartSocket {
         Self {
             room_name: room,
             device_name,
+            turned_on: RefCell::new(false),
         }
+    }
+
+    pub fn status(&self) -> String {
+        format!(
+            "name {}, room: {}, is turned on: {}",
+            self.device_name,
+            self.device_name,
+            self.turned_on.borrow()
+        )
+    }
+
+    pub fn turn_on(&self) {
+        self.turned_on.replace(true);
+    }
+
+    pub fn turn_off(&self) {
+        self.turned_on.replace(false);
     }
 }
 
@@ -35,6 +111,16 @@ impl SmartDevice for SmartSocket {
 
     fn get_room(&self) -> &str {
         &self.room_name
+    }
+}
+
+impl SmartDevice for NetworkSmartSocket {
+    fn get_name(&self) -> &str {
+        self.socket.get_name()
+    }
+
+    fn get_room(&self) -> &str {
+        self.socket.get_room()
     }
 }
 

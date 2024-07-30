@@ -2,12 +2,11 @@ mod devices;
 mod reports;
 mod utils;
 
-use network::
-
-use crate::devices::{SmartHouse, SmartSocket, SmartThermometer};
+use crate::devices::{NetworkSmartSocket, SmartHouse, SmartSocket, SmartThermometer};
 use crate::reports::{BorrowingDeviceInfoProvider, OwningDeviceInfoProvider};
 
 fn main() {
+    println!("starting smart house");
     // Инициализация устройств
     let socket1 = Box::new(SmartSocket::new(
         String::from("room1"),
@@ -18,6 +17,11 @@ fn main() {
         String::from("room2"),
         String::from("socket2"),
     ));
+    let socket3 = Box::new(NetworkSmartSocket::create(
+        "127.0.0.1:33445",
+        String::from("room1"),
+        String::from("socket3"),
+    ));
     let thermo = Box::new(SmartThermometer::new(
         String::from("room1"),
         String::from("thermo1"),
@@ -27,6 +31,7 @@ fn main() {
     let mut house = SmartHouse::builder()
         .add(socket1.clone())
         .add(socket2.clone())
+        .add(socket3.clone())
         .add(thermo.clone())
         .build();
 
@@ -59,4 +64,7 @@ fn main() {
         Ok(s) => println!("Report #2:\n{s}"),
         Err(e) => println!("Error occurred:\n{e}"),
     }
+
+    socket3.listen();
+    println!("finished");
 }

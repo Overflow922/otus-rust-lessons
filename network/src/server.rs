@@ -1,35 +1,58 @@
-use std::net::{TcpListener, TcpStream};
 use crate::utils::{ConnectError, ConnectResult, RecvResult, SendResult};
+use crate::{MessageProcessor, NetworkConnection, NetworkListener};
+use std::io;
+use std::io::{Read, Write};
+use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
+use std::rc::Rc;
 
-const PROTO_VER: str = b"0001";
+const PROTO_VER: &[u8; 4] = b"0001";
 
+#[derive(Debug, Clone)]
 pub struct TcpServer {
-    server: TcpListener,
+    server: Rc<TcpListener>,
 }
 
-impl NetworkListener for TcpServer {
-    fn create(addr: Addrs) -> NetworkListener {
-        Self {
-            server: TcpListener::bind(addr)?
-        }
-    }
-
-    fn incoming(&self) -> impl Iterator<Item=ConnectResult<StpConnection>> + '_ {
+impl TcpServer {
+    fn incoming(&self) -> impl Iterator<Item = ConnectResult<TcpConnection>> + '_ {
         self.server.incoming().map(|s| match s {
-            Ok(s) => try_nadshake(s),
+            Ok(s) => TcpServer::try_handshake(s),
             Err(e) => Err(ConnectError::Io(e)),
         })
     }
 
-    fn try_handshake(mut stream: TcpStream) -> ConnectResult<NetworkConnection> {
-        let mut buf = [4, u32];
-        stream.read_exactly(buf);
-        if buf != PROTO_VER {
+    fn try_handshake(mut stream: TcpStream) -> ConnectResult<TcpConnection> {
+        let mut buf: [u8; 4] = [0; 4];
+        stream.read_exact(&mut buf)?;
+        println!(
+            "start handshaking. Expected ver is {:?}, actual: {:?}",
+            PROTO_VER, buf
+        );
+        if &buf != PROTO_VER {
             let msg = format!("received: {:?}", buf);
             return Err(ConnectError::BadHandshake(msg));
         }
-        stream.write_all(PROTO_VER);
+        println!("Sending back version");
+        stream.write_all(PROTO_VER)?;
         Ok(TcpConnection { stream })
+    }
+}
+
+impl NetworkListener for TcpServer {
+    fn create<Addr>(addr: Addr) -> Self
+    where
+        Addr: ToSocketAddrs,
+    {
+        println!("Creating server");
+        TcpServer {
+            server: Rc::new(TcpListener::bind(addr).unwrap()),
+        }
+    }
+
+    fn listen(&self, mut processor: impl MessageProcessor) {
+        println!("listening for incoming connection...");
+        for conn in self.incoming() {
+            processor.process(conn.unwrap());
+        }
     }
 }
 

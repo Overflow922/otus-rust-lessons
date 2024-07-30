@@ -3,11 +3,12 @@ use std::io;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, ToSocketAddrs};
 
+pub mod client;
 pub mod server;
-mod utils;
+pub mod utils;
 
 pub trait MessageProcessor {
-    fn process(&self, conn: impl NetworkConnection);
+    fn process(&mut self, conn: impl NetworkConnection);
 }
 
 pub trait NetworkListener {
