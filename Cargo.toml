@@ -3,5 +3,6 @@
 members = [
     "smart_house",
     "network",
-    "client"
-, "example"]
+    "client", 
+    "example", 
+    "udp"]

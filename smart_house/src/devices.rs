@@ -1,9 +1,10 @@
 use crate::reports::DeviceInfoProvider;
-use network::server::TcpServer;
+use network::server::{TcpServer, UdpMessageProcessor, UdpServer};
 use network::{MessageProcessor, NetworkConnection, NetworkListener};
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::net::ToSocketAddrs;
 
 pub trait SmartDevice {
     fn get_name(&self) -> &str;
@@ -75,6 +76,7 @@ impl NetworkSmartSocket {
 pub struct SmartThermometer {
     pub room_name: String,
     pub device_name: String,
+    pub temp: RefCell<u16>,
 }
 
 impl SmartSocket {
@@ -124,11 +126,65 @@ impl SmartDevice for NetworkSmartSocket {
     }
 }
 
+#[derive(Clone)]
+pub struct ThermometerUdpMessageProcessor {
+    therm: SmartThermometer,
+}
+impl ThermometerUdpMessageProcessor {
+    pub fn create(therm: SmartThermometer) -> Self {
+        Self { therm }
+    }
+}
+
+impl UdpMessageProcessor for &ThermometerUdpMessageProcessor {
+    fn process(&mut self, message: network::server::UdpMessage) {
+        println!("updating temp {}", message.message);
+        self.therm
+            .temp
+            .replace(message.message.parse::<u16>().unwrap());
+    }
+}
+
+#[derive(Clone)]
+pub struct UdpSmartThermometer {
+    pub thermometer: SmartThermometer,
+    udp: UdpServer,
+    processor: ThermometerUdpMessageProcessor,
+}
+
+impl SmartDevice for UdpSmartThermometer {
+    fn get_name(&self) -> &str {
+        self.thermometer.get_name()
+    }
+
+    fn get_room(&self) -> &str {
+        self.thermometer.get_room()
+    }
+}
+
+impl UdpSmartThermometer {
+    pub fn create<Addr>(therm: SmartThermometer, addr: Addr) -> Self
+    where
+        Addr: ToSocketAddrs,
+    {
+        Self {
+            processor: ThermometerUdpMessageProcessor::create(therm.clone()),
+            thermometer: therm.clone(),
+            udp: UdpServer::bind(addr).expect("connection error"),
+        }
+    }
+
+    pub fn listen(&self) {
+        let _ = self.udp.listen(&self.processor);
+    }
+}
+
 impl SmartThermometer {
     pub fn new(room_name: String, device_name: String) -> Self {
         Self {
             room_name,
             device_name,
+            temp: RefCell::new(0),
         }
     }
 }

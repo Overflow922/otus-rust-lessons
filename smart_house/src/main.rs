@@ -2,6 +2,8 @@ mod devices;
 mod reports;
 mod utils;
 
+use devices::UdpSmartThermometer;
+
 use crate::devices::{NetworkSmartSocket, SmartHouse, SmartSocket, SmartThermometer};
 use crate::reports::{BorrowingDeviceInfoProvider, OwningDeviceInfoProvider};
 
@@ -22,9 +24,9 @@ fn main() {
         String::from("room1"),
         String::from("socket3"),
     ));
-    let thermo = Box::new(SmartThermometer::new(
-        String::from("room1"),
-        String::from("thermo1"),
+    let thermo = Box::new(UdpSmartThermometer::create(
+        SmartThermometer::new(String::from("room1"), String::from("thermo1")),
+        "127.0.0.1:33440",
     ));
 
     // Инициализация дома
@@ -58,13 +60,14 @@ fn main() {
     }
 
     // Строим отчёт с использованием `BorrowingDeviceInfoProvider`.
-    let info_provider_2 = BorrowingDeviceInfoProvider::new(&socket2, &thermo);
+    let info_provider_2 = BorrowingDeviceInfoProvider::new(&socket2, &thermo.thermometer);
 
     match house.create_report(&info_provider_2) {
         Ok(s) => println!("Report #2:\n{s}"),
         Err(e) => println!("Error occurred:\n{e}"),
     }
 
+    thermo.listen();
     socket3.listen();
     println!("finished");
 }

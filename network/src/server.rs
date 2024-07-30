@@ -1,8 +1,8 @@
-use crate::utils::{ConnectError, ConnectResult, RecvResult, SendResult};
+use crate::utils::{ConnectError, ConnectResult, RecvError, RecvResult, SendResult};
 use crate::{MessageProcessor, NetworkConnection, NetworkListener};
-use std::io;
-use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
+use core::str;
+use std::io::{self, Read, Write};
+use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs, UdpSocket};
 use std::rc::Rc;
 
 const PROTO_VER: &[u8; 4] = b"0001";
@@ -73,5 +73,67 @@ impl NetworkConnection for TcpConnection {
     /// Address of connected client
     fn peer_addr(&self) -> io::Result<SocketAddr> {
         self.stream.peer_addr()
+    }
+}
+
+pub trait UdpMessageProcessor {
+    fn process(&mut self, message: UdpMessage);
+}
+
+#[derive(Clone)]
+pub struct UdpServer {
+    server: Rc<UdpSocket>,
+}
+
+pub struct UdpMessage {
+    pub source: SocketAddr,
+    pub message: String,
+}
+
+impl UdpServer {
+    pub fn bind<Addr>(addr: Addr) -> ConnectResult<Self>
+    where
+        Addr: ToSocketAddrs,
+    {
+        let conn = UdpSocket::bind(addr)?;
+        Ok(Self {
+            server: Rc::new(conn),
+        })
+    }
+
+    pub fn listen(&self, mut processor: impl UdpMessageProcessor) -> Result<(), RecvError> {
+        match self.recv_string() {
+            Ok(udp) => {
+                processor.process(udp);
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    pub fn send<Resp: AsRef<str>>(&self, mess: Resp, source: &SocketAddr) -> SendResult {
+        self.send_string(mess, source)
+    }
+
+    fn send_string<Data: AsRef<str>>(&self, data: Data, source: &SocketAddr) -> SendResult {
+        let bytes = data.as_ref().as_bytes();
+        let len = bytes.len() as u32;
+        let len_bytes = len.to_be_bytes();
+        self.server.send_to(&len_bytes, source)?;
+        self.server.send_to(bytes, source)?;
+        Ok(())
+    }
+
+    fn recv_string(&self) -> Result<UdpMessage, RecvError> {
+        let mut buf = [0; 4];
+        self.server.recv_from(&mut buf)?;
+        let len = u32::from_be_bytes(buf);
+
+        let mut buf = vec![0; len as _];
+        let (_, source) = self.server.recv_from(&mut buf)?;
+        match String::from_utf8(buf) {
+            Ok(v) => Ok(UdpMessage { source, message: v }),
+            Err(_) => Err(RecvError::BadEncoding),
+        }
     }
 }
