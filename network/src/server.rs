@@ -1,10 +1,12 @@
 use crate::utils::{ConnectError, ConnectResult, RecvError, RecvResult, SendResult};
-use crate::{MessageProcessor, NetworkConnection, NetworkListener};
+use crate::{NetworkConnection, NetworkListener};
 use core::str;
-use std::io::{self, Read, Write};
-use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs, UdpSocket};
+use std::io::{self};
+use std::net::SocketAddr;
 use std::rc::Rc;
 use std::sync::Arc;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream, ToSocketAddrs, UdpSocket};
 
 const PROTO_VER: &[u8; 4] = b"0001";
 
@@ -14,16 +16,14 @@ pub struct TcpServer {
 }
 
 impl TcpServer {
-    fn incoming(&self) -> impl Iterator<Item = ConnectResult<TcpConnection>> + '_ {
-        self.server.incoming().map(|s| match s {
-            Ok(s) => TcpServer::try_handshake(s),
-            Err(e) => Err(ConnectError::Io(e)),
-        })
+    async fn accept(&self) -> ConnectResult<TcpConnection> {
+        let (con, _) = self.server.accept().await?;
+        TcpServer::try_handshake(con).await
     }
 
-    fn try_handshake(mut stream: TcpStream) -> ConnectResult<TcpConnection> {
+    async fn try_handshake(mut stream: TcpStream) -> ConnectResult<TcpConnection> {
         let mut buf: [u8; 4] = [0; 4];
-        stream.read_exact(&mut buf)?;
+        stream.read_exact(&mut buf).await?;
         println!(
             "start handshaking. Expected ver is {:?}, actual: {:?}",
             PROTO_VER, buf
@@ -33,42 +33,64 @@ impl TcpServer {
             return Err(ConnectError::BadHandshake(msg));
         }
         println!("Sending back version");
-        stream.write_all(PROTO_VER)?;
+        stream.write_all(PROTO_VER).await?;
         Ok(TcpConnection { stream })
     }
 }
 
 impl NetworkListener for TcpServer {
-    fn create<Addr>(addr: Addr) -> Self
+    async fn create<Addr>(addr: Addr) -> Self
     where
         Addr: ToSocketAddrs,
     {
         println!("Creating server");
         TcpServer {
-            server: Rc::new(TcpListener::bind(addr).unwrap()),
+            server: Rc::new(TcpListener::bind(addr).await.unwrap()),
         }
     }
 
-    fn listen(&self, mut processor: impl MessageProcessor) {
+    async fn listen(&self) {
         println!("listening for incoming connection...");
-        for conn in self.incoming() {
-            processor.process(conn.unwrap());
+
+        loop {
+            let con = match self.accept().await {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("Can't establish connection: {}", e);
+                    continue;
+                }
+            };
+            tokio::spawn(async move { TcpServer::process(con).await });
+        }
+    }
+
+    async fn process(mut conn: impl NetworkConnection) {
+        if let Ok(str) = conn.recv_request().await {
+            if str == "status" {
+                let _ = conn.send_response("status");
+            } else if str == "turn 1" {
+                let _ = conn.send_response("socket turned on").await;
+            } else if str == "turn 0" {
+                let _ = conn.send_response("socket turned off").await;
+            } else {
+                let _ = conn.send_response("unknown command").await;
+            }
         }
     }
 }
 
-struct TcpConnection {
+pub struct TcpConnection {
     stream: TcpStream,
 }
 
 impl NetworkConnection for TcpConnection {
-    fn send_response<Resp: AsRef<str>>(&mut self, response: Resp) -> SendResult {
-        crate::send_string(response, &mut self.stream)
+    async fn send_response<Resp: AsRef<str>>(&mut self, response: Resp) -> SendResult {
+        crate::send_string(response, &mut self.stream).await
     }
 
     /// Receive requests from client
-    fn recv_request(&mut self) -> RecvResult {
-        crate::recv_string(&mut self.stream)
+    async fn recv_request(&mut self) -> RecvResult {
+        crate::recv_string(&mut self.stream).await
     }
 
     /// Address of connected client
@@ -92,18 +114,22 @@ pub struct UdpMessage {
 }
 
 impl UdpServer {
-    pub fn bind<Addr>(addr: Addr) -> ConnectResult<Self>
+    pub async fn bind<Addr>(addr: Addr) -> ConnectResult<Self>
     where
         Addr: ToSocketAddrs,
     {
-        let conn = UdpSocket::bind(addr)?;
+        let conn = UdpSocket::bind(addr).await.unwrap();
         Ok(Self {
             server: Arc::new(conn),
         })
     }
 
-    pub fn listen(&self, mut processor: impl UdpMessageProcessor) -> Result<(), RecvError> {
-        match self.recv_string() {
+    pub async fn listen(&self, mut processor: impl UdpMessageProcessor) -> Result<(), RecvError> {
+        println!("received message ");
+        let mes = self.recv_string().await;
+        println!("received message ");
+
+        match mes {
             Ok(udp) => {
                 processor.process(udp);
                 Ok(())
@@ -112,26 +138,26 @@ impl UdpServer {
         }
     }
 
-    pub fn send<Resp: AsRef<str>>(&self, mess: Resp, source: &SocketAddr) -> SendResult {
-        self.send_string(mess, source)
+    pub async fn send<Resp: AsRef<str>>(&self, mess: Resp, source: &String) -> SendResult {
+        self.send_string(mess, source).await
     }
 
-    fn send_string<Data: AsRef<str>>(&self, data: Data, source: &SocketAddr) -> SendResult {
+    pub async fn send_string<Data: AsRef<str>>(&self, data: Data, source: &String) -> SendResult {
         let bytes = data.as_ref().as_bytes();
         let len = bytes.len() as u32;
         let len_bytes = len.to_be_bytes();
-        self.server.send_to(&len_bytes, source)?;
-        self.server.send_to(bytes, source)?;
+        self.server.send_to(&len_bytes, source).await?;
+        self.server.send_to(bytes, source).await?;
         Ok(())
     }
 
-    fn recv_string(&self) -> Result<UdpMessage, RecvError> {
+    async fn recv_string(&self) -> Result<UdpMessage, RecvError> {
         let mut buf = [0; 4];
-        self.server.recv_from(&mut buf)?;
+        self.server.recv_from(&mut buf).await?;
         let len = u32::from_be_bytes(buf);
 
         let mut buf = vec![0; len as _];
-        let (_, source) = self.server.recv_from(&mut buf)?;
+        let (_, source) = self.server.recv_from(&mut buf).await?;
         match String::from_utf8(buf) {
             Ok(v) => Ok(UdpMessage { source, message: v }),
             Err(_) => Err(RecvError::BadEncoding),

@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 network = { path = "../network" }
+tokio = { version = "1", features = ["full"] }

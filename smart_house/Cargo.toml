@@ -10,3 +10,4 @@ thiserror = "1.0.30"
 network = {path = "../network"}
 log = { version = "0.4", features = ["std", "serde"] }
 env_logger = "0.11.5"
+tokio = { version = "1", features = ["full"] }

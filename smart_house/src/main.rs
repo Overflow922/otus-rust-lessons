@@ -7,7 +7,8 @@ use devices::UdpSmartThermometer;
 use crate::devices::{NetworkSmartSocket, SmartHouse, SmartSocket, SmartThermometer};
 use crate::reports::{BorrowingDeviceInfoProvider, OwningDeviceInfoProvider};
 
-fn main() {
+#[tokio::main]
+async fn main() {
     println!("starting smart house");
     // Инициализация устройств
     let socket1 = Box::new(SmartSocket::new(
@@ -19,15 +20,21 @@ fn main() {
         String::from("room2"),
         String::from("socket2"),
     ));
-    let socket3 = Box::new(NetworkSmartSocket::create(
-        "127.0.0.1:33445",
-        String::from("room1"),
-        String::from("socket3"),
-    ));
-    let thermo = Box::new(UdpSmartThermometer::create(
-        SmartThermometer::new(String::from("room1"), String::from("thermo1")),
-        "127.0.0.1:33440",
-    ));
+    let socket3 = Box::new(
+        NetworkSmartSocket::create(
+            "127.0.0.1:33445",
+            String::from("room1"),
+            String::from("socket3"),
+        )
+        .await,
+    );
+    let thermo = Box::new(
+        UdpSmartThermometer::create(
+            SmartThermometer::new(String::from("room1"), String::from("thermo1")),
+            "127.0.0.1:33440",
+        )
+        .await,
+    );
 
     // Инициализация дома
     let mut house = SmartHouse::builder()
@@ -67,7 +74,6 @@ fn main() {
         Err(e) => println!("Error occurred:\n{e}"),
     }
 
-    thermo.listen();
-    socket3.listen();
+    tokio::join!(thermo.listen(), socket3.listen());
     println!("finished");
 }

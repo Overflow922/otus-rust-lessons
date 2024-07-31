@@ -1,12 +1,11 @@
 use crate::reports::DeviceInfoProvider;
 use network::server::{TcpServer, UdpMessageProcessor, UdpServer};
-use network::{MessageProcessor, NetworkConnection, NetworkListener};
+use network::NetworkListener;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::net::ToSocketAddrs;
 use std::sync::{Arc, Mutex};
-use std::thread;
+use tokio::net::ToSocketAddrs;
 
 pub trait SmartDevice {
     fn get_name(&self) -> &str;
@@ -21,43 +20,13 @@ pub struct SmartSocket {
 }
 
 #[derive(Debug, Clone)]
-struct NetworkSmartSocketMessageProcessor {
-    socket: SmartSocket,
-}
-
-impl NetworkSmartSocketMessageProcessor {
-    fn create(socket: SmartSocket) -> Self {
-        NetworkSmartSocketMessageProcessor { socket }
-    }
-}
-
-impl MessageProcessor for &NetworkSmartSocketMessageProcessor {
-    fn process(&mut self, mut conn: impl NetworkConnection) {
-        if let Ok(str) = conn.recv_request() {
-            if str == "status" {
-                let _ = conn.send_response(self.socket.status());
-            } else if str == "turn 1" {
-                self.socket.turn_on();
-                let _ = conn.send_response("socket turned on");
-            } else if str == "turn 0" {
-                self.socket.turn_off();
-                let _ = conn.send_response("socket turned off");
-            } else {
-                let _ = conn.send_response("unknown command");
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct NetworkSmartSocket {
     pub socket: SmartSocket,
     pub server: TcpServer,
-    processor: NetworkSmartSocketMessageProcessor,
 }
 
 impl NetworkSmartSocket {
-    pub fn create(addr: &str, room_name: String, device_name: String) -> Self {
+    pub async fn create(addr: &str, room_name: String, device_name: String) -> Self {
         let socket = SmartSocket {
             room_name,
             device_name,
@@ -65,12 +34,11 @@ impl NetworkSmartSocket {
         };
         Self {
             socket: socket.clone(),
-            server: NetworkListener::create(addr),
-            processor: NetworkSmartSocketMessageProcessor::create(socket),
+            server: TcpServer::create(addr).await,
         }
     }
-    pub fn listen(&self) {
-        self.server.listen(&self.processor);
+    pub async fn listen(&self) {
+        let _ = self.server.listen().await;
     }
 }
 
@@ -163,22 +131,25 @@ impl SmartDevice for UdpSmartThermometer {
 }
 
 impl UdpSmartThermometer {
-    pub fn create<Addr>(therm: SmartThermometer, addr: Addr) -> Self
+    pub async fn create<Addr>(therm: SmartThermometer, addr: Addr) -> Self
     where
         Addr: ToSocketAddrs,
     {
         Self {
             processor: Arc::new(ThermometerUdpMessageProcessor::create(therm.clone())),
             thermometer: therm.clone(),
-            udp: Arc::new(UdpServer::bind(addr).expect("connection error")),
+            udp: Arc::new(UdpServer::bind(addr).await.unwrap()),
         }
     }
 
-    pub fn listen(&self) {
+    pub async fn listen(&self) {
         let udp = self.udp.clone();
         let processor = self.processor.clone();
-        thread::spawn(move || loop {
-            let _ = udp.listen(&*processor);
+        tokio::spawn(async move {
+            loop {
+                println!("listening for therm");
+                udp.listen(&*processor).await.unwrap();
+            }
         });
     }
 }
@@ -250,16 +221,12 @@ impl SmartHouse {
     }
 
     pub fn get_rooms(&self) -> Vec<&str> {
-        // Размер возвращаемого массива можно выбрать самостоятельно
         self.devices
             .keys()
-            // .iter()
             .map(|k| k.as_str())
             .collect::<Vec<&str>>()
     }
-    //  `self.devices.keys().map(|k| k.as_str())`
     pub fn devices(&self, room: String) -> Option<&HashMap<String, Box<dyn SmartDevice>>> {
-        // Размер возвращаемого массива можно выбрать самостоятельно
         self.devices.get(&room)
     }
 
@@ -287,10 +254,6 @@ impl SmartHouse {
             Ok(())
         }
     }
-    // self.devices.get(&room_name)
-    //     .expect("room not found")
-    //     .insert(String::from(device.get_name()), device)
-    //     .ok_or_else(|| "room not found")
 
     pub fn create_report<'a, T>(&'a self, provider: &'a T) -> Result<String, &str>
     where

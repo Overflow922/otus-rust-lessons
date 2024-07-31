@@ -1,6 +1,6 @@
-use std::io::{Read, Write};
-use std::net::{TcpStream, ToSocketAddrs};
 use thiserror::Error;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpStream, ToSocketAddrs};
 
 use crate::utils::{ConnectError, ConnectResult, RecvError, SendError};
 
@@ -12,27 +12,27 @@ const PROTO_VER: &[u8; 4] = b"0001";
 
 impl HttpConnectionClient {
     /// Try to connect to specified address and perform handshake.
-    pub fn connect<Addrs>(addrs: Addrs) -> ConnectResult<Self>
+    pub async fn connect<Addrs>(addrs: Addrs) -> ConnectResult<Self>
     where
         Addrs: ToSocketAddrs,
     {
-        let stream = TcpStream::connect(addrs)?;
-        Self::try_handshake(stream)
+        let stream = TcpStream::connect(addrs).await?;
+        Self::try_handshake(stream).await
     }
 
     /// Send request to connected STP server.
-    pub fn send_request<R: AsRef<str>>(&mut self, req: R) -> RequestResult {
+    pub async fn send_request<R: AsRef<str>>(&mut self, req: R) -> RequestResult {
         println!("sending command: {}", req.as_ref());
-        crate::send_string(req, &mut self.stream)?;
-        let response = crate::recv_string(&mut self.stream)?;
+        crate::send_string(req, &mut self.stream).await?;
+        let response = crate::recv_string(&mut self.stream).await?;
         Ok(response)
     }
 
-    fn try_handshake(mut stream: TcpStream) -> ConnectResult<Self> {
+    async fn try_handshake(mut stream: TcpStream) -> ConnectResult<Self> {
         println!("Start handshaking. Send version {:?}", PROTO_VER);
-        stream.write_all(PROTO_VER)?;
+        stream.write_all(PROTO_VER).await?;
         let mut buf = [0; 4];
-        stream.read_exact(&mut buf)?;
+        stream.read_exact(&mut buf).await?;
         println!(
             "received answer. Expected ver is {:?}, actual: {:?}",
             PROTO_VER, buf
