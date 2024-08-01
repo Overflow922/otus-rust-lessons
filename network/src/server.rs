@@ -67,7 +67,7 @@ impl NetworkListener for TcpServer {
     async fn process(mut conn: impl NetworkConnection) {
         if let Ok(str) = conn.recv_request().await {
             if str == "status" {
-                let _ = conn.send_response("status");
+                let _ = conn.send_response("status").await;
             } else if str == "turn 1" {
                 let _ = conn.send_response("socket turned on").await;
             } else if str == "turn 0" {
@@ -125,9 +125,7 @@ impl UdpServer {
     }
 
     pub async fn listen(&self, mut processor: impl UdpMessageProcessor) -> Result<(), RecvError> {
-        println!("received message ");
         let mes = self.recv_string().await;
-        println!("received message ");
 
         match mes {
             Ok(udp) => {

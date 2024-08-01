@@ -42,10 +42,7 @@ pub struct SmartThermometerClient {
 impl SmartThermometerClient {
     pub async fn new<Addr: ToSocketAddrs>(addr: Addr, target: String) -> ConnectResult<Self> {
         let client = UdpServer::bind(addr).await?;
-        Ok(Self {
-            client,
-            target,
-        })
+        Ok(Self { client, target })
     }
 
     pub async fn update_temp(&self, temp: u16) -> SendResult {

@@ -9,8 +9,10 @@ pub mod server;
 pub mod utils;
 
 pub trait MessageProcessor {
-    fn process(&mut self, conn: impl NetworkConnection) -> impl std::future::Future<Output = ()> + Send;
-    // fn process(conn: TcpConnection) -> impl std::future::Future<Output = ()> + Send;
+    fn process(
+        &mut self,
+        conn: impl NetworkConnection,
+    ) -> impl std::future::Future<Output = ()> + Send;
 }
 
 pub trait NetworkListener {
@@ -20,7 +22,7 @@ pub trait NetworkListener {
 
     async fn listen(&self);
 
-    async fn process(conn: impl NetworkConnection);    
+    async fn process(conn: impl NetworkConnection);
 }
 
 pub trait NetworkConnection {
