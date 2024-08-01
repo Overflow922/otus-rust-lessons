@@ -1,4 +1,5 @@
 use crate::reports::DeviceInfoProvider;
+use anyhow::{anyhow, Result};
 use network::server::{TcpServer, UdpMessageProcessor, UdpServer};
 use network::NetworkListener;
 use std::cell::RefCell;
@@ -6,7 +7,6 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::net::ToSocketAddrs;
-use anyhow::{anyhow, Result};
 
 pub trait SmartDevice {
     fn get_name(&self) -> &str;
@@ -241,11 +241,7 @@ impl SmartHouse {
         }
     }
 
-    pub fn add_device(
-        &mut self,
-        room_name: String,
-        device: Box<dyn SmartDevice>,
-    ) -> Result<()> {
+    pub fn add_device(&mut self, room_name: String, device: Box<dyn SmartDevice>) -> Result<()> {
         if self.devices.contains_key(&room_name) {
             Err(anyhow!("room not found"))
         } else {
