@@ -1,6 +1,8 @@
 use std::io;
 use thiserror::Error;
 
+use crate::server::UdpMessage;
+
 pub type ConnectResult<T> = Result<T, ConnectError>;
 
 /// Connection error. Includes IO and handshake error.
@@ -31,3 +33,5 @@ pub enum RecvError {
     #[error("bad encoding")]
     BadEncoding,
 }
+
+pub type UdpRecvResult = Result<UdpMessage, RecvError>;

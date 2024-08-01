@@ -6,6 +6,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::net::ToSocketAddrs;
+use anyhow::{anyhow, Result};
 
 pub trait SmartDevice {
     fn get_name(&self) -> &str;
@@ -230,9 +231,9 @@ impl SmartHouse {
         self.devices.get(&room)
     }
 
-    pub fn add_room(&mut self, name: String) -> Result<(), &'static str> {
+    pub fn add_room(&mut self, name: String) -> Result<()> {
         match self.devices.entry(name) {
-            Entry::Occupied(_) => Err("duplicate room. Can't add"),
+            Entry::Occupied(_) => Err(anyhow!("duplicate room. Can't add")),
             Entry::Vacant(v) => {
                 v.insert(HashMap::default());
                 Ok(())
@@ -244,9 +245,9 @@ impl SmartHouse {
         &mut self,
         room_name: String,
         device: Box<dyn SmartDevice>,
-    ) -> Result<(), &'static str> {
+    ) -> Result<()> {
         if self.devices.contains_key(&room_name) {
-            Err("room not found")
+            Err(anyhow!("room not found"))
         } else {
             self.devices.entry(room_name).and_modify(|v| {
                 v.insert(device.get_name().to_string(), device);
@@ -255,7 +256,7 @@ impl SmartHouse {
         }
     }
 
-    pub fn create_report<'a, T>(&'a self, provider: &'a T) -> Result<String, &str>
+    pub fn create_report<'a, T>(&'a self, provider: &'a T) -> Result<String>
     where
         T: DeviceInfoProvider,
     {

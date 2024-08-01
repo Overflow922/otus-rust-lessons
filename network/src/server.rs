@@ -1,4 +1,4 @@
-use crate::utils::{ConnectError, ConnectResult, RecvError, RecvResult, SendResult};
+use crate::utils::{ConnectError, ConnectResult, RecvError, RecvResult, SendResult, UdpRecvResult};
 use crate::{NetworkConnection, NetworkListener};
 use core::str;
 use std::io::{self};
@@ -149,7 +149,7 @@ impl UdpServer {
         Ok(())
     }
 
-    async fn recv_string(&self) -> Result<UdpMessage, RecvError> {
+    async fn recv_string(&self) -> UdpRecvResult {
         let mut buf = [0; 4];
         self.server.recv_from(&mut buf).await?;
         let len = u32::from_be_bytes(buf);

@@ -1,7 +1,8 @@
 use crate::devices::{SmartDevice, SmartHouse, SmartSocket, SmartThermometer};
+use anyhow::{anyhow, Result};
 
 pub trait DeviceInfoProvider {
-    fn get_state(&self, house: &SmartHouse) -> Result<String, &str>;
+    fn get_state(&self, house: &SmartHouse) -> Result<String>;
 
     fn check(house: &SmartHouse, room_name: &str, device: &dyn SmartDevice) -> bool {
         if !house.get_rooms().contains(&room_name) {
@@ -38,13 +39,13 @@ impl<'a, 'b> BorrowingDeviceInfoProvider<'a, 'b> {
 }
 
 impl DeviceInfoProvider for OwningDeviceInfoProvider {
-    fn get_state(&self, house: &SmartHouse) -> Result<String, &str> {
+    fn get_state(&self, house: &SmartHouse) -> Result<String> {
         if !<OwningDeviceInfoProvider as DeviceInfoProvider>::check(
             house,
             &self.socket.room_name,
             &self.socket,
         ) {
-            return Err("cant find device");
+            return Err(anyhow!("cant find device"));
         }
         Ok(format!(
             "device {} in room {} is active",
@@ -54,13 +55,13 @@ impl DeviceInfoProvider for OwningDeviceInfoProvider {
 }
 
 impl DeviceInfoProvider for BorrowingDeviceInfoProvider<'_, '_> {
-    fn get_state(&self, house: &SmartHouse) -> Result<String, &str> {
+    fn get_state(&self, house: &SmartHouse) -> Result<String> {
         if !<BorrowingDeviceInfoProvider as DeviceInfoProvider>::check(
             house,
             &self.socket.room_name,
             self.socket,
         ) {
-            return Err("device not found");
+            return Err(anyhow!("device not found"));
         }
         let result = format!(
             "device {} in room {} is active",
@@ -72,7 +73,7 @@ impl DeviceInfoProvider for BorrowingDeviceInfoProvider<'_, '_> {
             &self.thermo.room_name,
             self.thermo,
         ) {
-            return Err("cant find device");
+            return Err(anyhow!("cant find device"));
         }
         Ok(format!(
             "{}\ndevice {} in room {} is active",
