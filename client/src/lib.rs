@@ -13,24 +13,24 @@ impl SmartSocketClient {
         Ok(Self { client })
     }
 
-    pub async fn turn_on(&mut self) -> Result<(), RequestError> {
+    pub async fn turn_on(&mut self) -> Result<String, RequestError> {
         self.turn(1).await
     }
 
-    pub async fn turn_off(&mut self) -> Result<(), RequestError> {
+    pub async fn turn_off(&mut self) -> Result<String, RequestError> {
         self.turn(0).await
     }
 
-    async fn turn(&mut self, state: u16) -> Result<(), RequestError> {
+    async fn turn(&mut self, state: u16) -> Result<String, RequestError> {
         let result = self.client.send_request(format!("turn {}", state)).await?;
         println!("response is: {}", result);
-        Ok(())
+        Ok(result)
     }
 
-    pub async fn status(&mut self) -> Result<(), RequestError> {
+    pub async fn status(&mut self) -> Result<String, RequestError> {
         let result = self.client.send_request("status").await?;
         println!("status is: {}", result);
-        Ok(())
+        Ok(result)
     }
 }
 
