@@ -2,7 +2,6 @@ use crate::reports::DeviceInfoProvider;
 use anyhow::{anyhow, Result};
 use network::server::{TcpServer, UdpMessageProcessor, UdpServer};
 use network::NetworkListener;
-use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -13,11 +12,11 @@ pub trait SmartDevice {
     fn get_room(&self) -> &str;
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct SmartSocket {
     pub room_name: String,
     pub device_name: String,
-    pub turned_on: RefCell<bool>,
+    pub turned_on: Arc<Mutex<bool>>,
 }
 
 #[derive(Debug, Clone)]
@@ -31,7 +30,7 @@ impl NetworkSmartSocket {
         let socket = SmartSocket {
             room_name,
             device_name,
-            turned_on: RefCell::new(false),
+            turned_on: Arc::new(Mutex::new(false)),
         };
         Self {
             socket: socket.clone(),
@@ -55,7 +54,7 @@ impl SmartSocket {
         Self {
             room_name: room,
             device_name,
-            turned_on: RefCell::new(false),
+            turned_on: Arc::new(Mutex::new(false)),
         }
     }
 
@@ -64,16 +63,16 @@ impl SmartSocket {
             "name {}, room: {}, is turned on: {}",
             self.device_name,
             self.device_name,
-            self.turned_on.borrow()
+            self.turned_on.lock().unwrap()
         )
     }
 
     pub fn turn_on(&self) {
-        self.turned_on.replace(true);
+        *self.turned_on.lock().unwrap() = true;
     }
 
     pub fn turn_off(&self) {
-        self.turned_on.replace(false);
+        *self.turned_on.lock().unwrap() = false;
     }
 }
 
@@ -176,11 +175,11 @@ impl SmartDevice for SmartThermometer {
 }
 
 pub struct SmartHouse {
-    devices: HashMap<String, HashMap<String, Box<dyn SmartDevice>>>,
+    devices: HashMap<String, HashMap<String, Box<dyn SmartDevice + Send + Sync>>>,
 }
 
 pub struct SmartHouseBuilder {
-    devices: HashMap<String, HashMap<String, Box<dyn SmartDevice>>>,
+    devices: HashMap<String, HashMap<String, Box<dyn SmartDevice + Send + Sync>>>,
 }
 
 impl SmartHouseBuilder {
@@ -189,7 +188,7 @@ impl SmartHouseBuilder {
             devices: HashMap::default(),
         }
     }
-    pub fn add(mut self, device: Box<dyn SmartDevice>) -> SmartHouseBuilder {
+    pub fn add(mut self, device: Box<dyn SmartDevice + Send + Sync>) -> SmartHouseBuilder {
         let entry = self
             .devices
             .entry(device.get_room().to_string())
@@ -209,7 +208,7 @@ impl SmartHouseBuilder {
 }
 
 impl SmartHouse {
-    fn new(map: HashMap<String, HashMap<String, Box<dyn SmartDevice>>>) -> Self {
+    fn new(map: HashMap<String, HashMap<String, Box<dyn SmartDevice + Send + Sync>>>) -> Self {
         Self { devices: map }
     }
 
@@ -217,7 +216,10 @@ impl SmartHouse {
         SmartHouseBuilder::new()
     }
 
-    pub fn get_room(&self, name: String) -> Option<&HashMap<String, Box<dyn SmartDevice>>> {
+    pub fn get_room(
+        &self,
+        name: String,
+    ) -> Option<&HashMap<String, Box<dyn SmartDevice + Send + Sync>>> {
         self.devices.get(&name)
     }
 
@@ -227,7 +229,10 @@ impl SmartHouse {
             .map(|k| k.as_str())
             .collect::<Vec<&str>>()
     }
-    pub fn devices(&self, room: String) -> Option<&HashMap<String, Box<dyn SmartDevice>>> {
+    pub fn devices(
+        &self,
+        room: String,
+    ) -> Option<&HashMap<String, Box<dyn SmartDevice + Send + Sync>>> {
         self.devices.get(&room)
     }
 
@@ -241,8 +246,13 @@ impl SmartHouse {
         }
     }
 
-    pub fn add_device(&mut self, room_name: String, device: Box<dyn SmartDevice>) -> Result<()> {
-        if self.devices.contains_key(&room_name) {
+    pub fn add_device(
+        &mut self,
+        room_name: String,
+        device: Box<dyn SmartDevice + Send + Sync>,
+    ) -> Result<()> {
+        println!("{room_name} -> {}", device.get_name());
+        if !self.devices.contains_key(&room_name) {
             Err(anyhow!("room not found"))
         } else {
             self.devices.entry(room_name).and_modify(|v| {

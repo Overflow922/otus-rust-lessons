@@ -1,14 +1,19 @@
 mod devices;
+mod http;
 mod reports;
 mod utils;
 
-use devices::UdpSmartThermometer;
+use std::sync::{Arc, Mutex};
 
 use crate::devices::{NetworkSmartSocket, SmartHouse, SmartSocket, SmartThermometer};
 use crate::reports::{BorrowingDeviceInfoProvider, OwningDeviceInfoProvider};
+use devices::UdpSmartThermometer;
 
-#[tokio::main]
+// #[tokio::main]
+#[actix_web::main]
 async fn main() {
+    std::env::set_var("RUST_LOG", "debug");
+    env_logger::init();
     println!("starting smart house");
     // Инициализация устройств
     let socket1 = Box::new(SmartSocket::new(
@@ -74,6 +79,9 @@ async fn main() {
         Err(e) => println!("Error occurred:\n{e}"),
     }
 
-    tokio::join!(thermo.listen(), socket3.listen());
-    println!("finished");
+    let _ = tokio::join!(
+        thermo.listen(),
+        socket3.listen(),
+        http::run_http_server(Arc::new(Mutex::new(house)))
+    );
 }

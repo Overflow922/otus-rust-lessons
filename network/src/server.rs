@@ -3,8 +3,7 @@ use crate::{NetworkConnection, NetworkListener};
 use core::str;
 use std::io::{self};
 use std::net::SocketAddr;
-use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs, UdpSocket};
 
@@ -12,12 +11,12 @@ const PROTO_VER: &[u8; 4] = b"0001";
 
 #[derive(Debug, Clone)]
 pub struct TcpServer {
-    server: Rc<TcpListener>,
+    server: Arc<Mutex<TcpListener>>,
 }
 
 impl TcpServer {
     async fn accept(&self) -> ConnectResult<TcpConnection> {
-        let (con, _) = self.server.accept().await?;
+        let (con, _) = self.server.clone().lock().unwrap().accept().await?;
         TcpServer::try_handshake(con).await
     }
 
@@ -45,7 +44,7 @@ impl NetworkListener for TcpServer {
     {
         println!("Creating server");
         TcpServer {
-            server: Rc::new(TcpListener::bind(addr).await.unwrap()),
+            server: Arc::new(Mutex::new(TcpListener::bind(addr).await.unwrap())),
         }
     }
 
