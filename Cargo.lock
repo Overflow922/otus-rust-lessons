@@ -995,6 +995,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "dyn_lib"
+version = "0.1.0"
+
+[[package]]
 name = "encoding_rs"
 version = "0.8.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1075,6 +1079,7 @@ dependencies = [
  "env_logger",
  "iced",
  "iced_futures",
+ "libloading 0.8.5",
  "log",
  "network",
  "tokio",
@@ -2886,6 +2891,7 @@ dependencies = [
  "actix-web",
  "anyhow",
  "env_logger",
+ "libloading 0.8.5",
  "log",
  "network",
  "serde",

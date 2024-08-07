@@ -5,4 +5,5 @@ members = [
     "network",
     "client", 
     "example", 
-    "udp"]
+    "udp", 
+    "dyn_lib"]

@@ -12,6 +12,9 @@ use devices::UdpSmartThermometer;
 // #[tokio::main]
 #[actix_web::main]
 async fn main() {
+    unsafe {
+        let _ = libloading::Library::new("target/debug/libdyn_lib.so").unwrap();
+    }
     std::env::set_var("RUST_LOG", "debug");
     env_logger::init();
     println!("starting smart house");

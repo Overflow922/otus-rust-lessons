@@ -1,4 +1,8 @@
-use std::io;
+use core::str;
+use std::{
+    ffi::{c_char, CString},
+    io,
+};
 use thiserror::Error;
 
 use crate::server::UdpMessage;
@@ -35,3 +39,15 @@ pub enum RecvError {
 }
 
 pub type UdpRecvResult = Result<UdpMessage, RecvError>;
+
+#[link(name = "dyn_lib")]
+extern "C" {
+    pub fn do_handshake(left: *const c_char, right: *const c_char) -> bool;
+}
+
+pub fn handshake(left: [u8; 4], right: [u8; 4]) -> bool {
+    let left = CString::new(std::str::from_utf8(&left).unwrap()).unwrap();
+    let right = CString::new(std::str::from_utf8(&right).unwrap()).unwrap();
+
+    unsafe { do_handshake(left.as_ptr(), right.as_ptr()) }
+}

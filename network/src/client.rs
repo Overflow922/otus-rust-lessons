@@ -2,7 +2,7 @@ use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpStream, ToSocketAddrs};
 
-use crate::utils::{ConnectError, ConnectResult, RecvError, SendError};
+use crate::utils::{self, ConnectError, ConnectResult, RecvError, SendError};
 
 pub struct HttpConnectionClient {
     stream: TcpStream,
@@ -37,7 +37,7 @@ impl HttpConnectionClient {
             "received answer. Expected ver is {:?}, actual: {:?}",
             PROTO_VER, buf
         );
-        if &buf != PROTO_VER {
+        if !utils::handshake(buf, *PROTO_VER) {
             let msg = format!("received: {:?}", buf);
             return Err(ConnectError::BadHandshake(msg));
         }

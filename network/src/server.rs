@@ -1,4 +1,4 @@
-use crate::utils::{ConnectError, ConnectResult, RecvError, RecvResult, SendResult, UdpRecvResult};
+use crate::utils::{self, ConnectError, ConnectResult, RecvError, RecvResult, SendResult, UdpRecvResult};
 use crate::{NetworkConnection, NetworkListener};
 use core::str;
 use std::io::{self};
@@ -27,7 +27,7 @@ impl TcpServer {
             "start handshaking. Expected ver is {:?}, actual: {:?}",
             PROTO_VER, buf
         );
-        if &buf != PROTO_VER {
+        if !utils::handshake(buf, *PROTO_VER) {
             let msg = format!("received: {:?}", buf);
             return Err(ConnectError::BadHandshake(msg));
         }
